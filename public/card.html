@@ -350,10 +350,18 @@ function buildCell(index, existingResult) {
     }
   }
 
-  canvas.addEventListener('pointerdown', (e) => { scratching = true; lastPos = null; onMove(e); });
-  canvas.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', () => { scratching = false; lastPos = null; });
-
+ canvas.addEventListener('pointerdown', (e) => {
+  scratching = true;
+  lastPos = null;
+  canvas.setPointerCapture(e.pointerId);
+  onMove(e);
+});
+canvas.addEventListener('pointermove', onMove);
+canvas.addEventListener('pointerup', (e) => {
+  scratching = false;
+  lastPos = null;
+  canvas.releasePointerCapture(e.pointerId);
+});
   return cell;
 }
 
