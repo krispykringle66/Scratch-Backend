@@ -100,16 +100,7 @@
     position: absolute;
     inset: 0;
     cursor: crosshair;
-  }
-
-  .cell-background {
-    position: absolute;
-    inset: 0;
-    opacity: 0.08;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    pointer-events: none;
+    z-index: 10;
   }
 
   .cell-result {
@@ -124,6 +115,7 @@
     text-align: center;
     padding: 4px;
     background: var(--lose);
+    z-index: 1;
   }
 
   .cell-result.win {
@@ -258,23 +250,6 @@ function updateTotal() {
 function buildCell(index, existingResult) {
   const cell = document.createElement('div');
   cell.className = 'cell';
-
-  // Add logo background
-  const logoBg = document.createElement('div');
-  logoBg.className = 'cell-background';
-  logoBg.innerHTML = `
-    <svg width="96" height="96" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="heartGrad${index}" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#ff1493;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#c71585;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <path d="M100,140 Q70,110 70,85 Q70,65 85,65 Q100,65 100,75 Q100,65 115,65 Q130,65 130,85 Q130,110 100,140 Z" fill="url(#heartGrad${index})" opacity="0.15"/>
-      <polyline points="70,100 80,90 90,110 100,100 110,80 120,120" stroke="#ff1493" stroke-width="1.5" fill="none" opacity="0.1"/>
-    </svg>
-  `;
-  cell.appendChild(logoBg);
 
   const resultLayer = document.createElement('div');
   resultLayer.className = 'cell-result';
