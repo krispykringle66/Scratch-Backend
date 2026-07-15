@@ -296,32 +296,36 @@ function buildCell(index, existingResult) {
   redrawFoil();
 
   async function triggerReveal() {
-    if (revealedAlready) return;
-    revealedAlready = true;
+  if (revealedAlready) return;
+  revealedAlready = true;
 
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillRect(0, 0, 96, 96);
-    resultLayer.innerHTML = '<span>Revealing…</span>';
+  resultLayer.innerHTML = '<span>Revealing…</span>';
 
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cellIndex: index })
-      });
-      if (!res.ok) throw new Error('reveal failed');
-      const data = await res.json();
-      canvas.remove();
-      paintResult(data.tier);
-      revealedResults[index] = data.tier;
-      updateTotal();
-    } catch (e) {
-      revealedAlready = false;
-      redrawFoil();
-      resultLayer.innerHTML = '';
-      showError('Lost connection while revealing — scratch this box again to retry.');
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cellIndex: index })
+    });
+    if (!res.ok) throw new Error('reveal failed');
+    const data = await res.json();
+
+    if (!data.tier || typeof data.tier.payout !== 'number' || typeof data.tier.name !== 'string') {
+      throw new Error('malformed reveal response: ' + JSON.stringify(data));
     }
+
+    paintResult(data.tier);          // render first
+    revealedResults[index] = data.tier;
+    updateTotal();
+    canvas.remove();                 // only remove once render succeeded
+  } catch (e) {
+    console.error(e);
+    revealedAlready = false;
+    resultLayer.innerHTML = '';
+    redrawFoil();                    // canvas is still attached, so this actually works now
+    showError('Lost connection while revealing — scratch this box again to retry.');
   }
+}
 
   function pointerPos(e) {
     const rect = canvas.getBoundingClientRect();
