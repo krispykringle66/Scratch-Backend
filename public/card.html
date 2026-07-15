@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>Scratch Card</title>
+<style>
+  :root {
+    --bg: #10151c;
+    --panel: #171f29;
+    --panel-edge: #232e3b;
+    --foil-a: #8a95a3;
+    --foil-b: #c3cad4;
+    --win: #2f8f5b;
+    --win-glow: #4fce8c;
+    --lose: #3a3f47;
+    --gold: #d4af6a;
+    --text: #e8ecf1;
+    --text-dim: #93a0b0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% -10%, #1c2530 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 60px;
+  }
+
+  .eyebrow {
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+
+  .price {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+
+  .card-panel {
+    background: linear-gradient(160deg, var(--panel), #131a22);
+    border: 1px solid var(--panel-edge);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 96px);
+    grid-template-rows: repeat(3, 96px);
+    gap: 10px;
+  }
+
+  .cell {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--lose);
+    touch-action: none;
+  }
+
+  .cell canvas {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+  }
+
+  .cell-result {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    padding: 4px;
+    background: var(--lose);
+  }
+
+  .cell-result.win {
+    background: linear-gradient(160deg, #1c4a33, #0f2e1f);
+    color: var(--win-glow);
+  }
+
+  .cell-result .amount {
+    font-size: 16px;
+    margin-top: 2px;
+  }
+
+  .status-row {
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hint {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .total {
+    font-size: 15px;
+    color: var(--text-dim);
+  }
+
+  .total strong {
+    color: var(--gold);
+    font-size: 20px;
+    margin-left: 6px;
+  }
+
+  .done-banner {
+    display: none;
+    margin-top: 6px;
+    color: var(--win-glow);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .error-banner {
+    display: none;
+    color: #e08585;
+    font-size: 13px;
+    text-align: center;
+    margin-top: 20px;
+    max-width: 320px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="eyebrow">Scratch Card</div>
+  <h1 id="presetName">Loading\u2026</h1>
+  <div class="price" id="priceLine"></div>
+
+  <div class="card-panel">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="status-row">
+    <div class="hint" id="hintText">Scratch each panel with your mouse or finger.</div>
+    <div class="total">Revealed so far:<strong id="totalAmount">0</strong></div>
+    <div class="done-banner" id="doneBanner">Card complete \u2014 show this screen to the host for payout.</div>
+  </div>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+<script>
+const sessionId = window.location.pathname.split('/').pop();
+const gridEl = document.getElementById('grid');
+const totalEl = document.getElementById('totalAmount');
+const doneBanner = document.getElementById('doneBanner');
+const errorBanner = document.getElementById('errorBanner');
+const hintText = document.getElementById('hintText');
+
+let revealedResults = new Array(9).fill(null);
+let runningTotal = 0;
+
+function showError(msg) {
+  errorBanner.textContent = msg;
+  errorBanner.style.display = 'block';
+}
+
+function updateTotal() {
+  runningTotal = revealedResults.reduce((sum, r) => sum + (r ? r.payout : 0), 0);
+  totalEl.textContent = runningTotal;
+  if (revealedResults.every(r => r !== null)) {
+    doneBanner.style.display = 'block';
+    hintText.style.display = 'none';
+  }
+}
+
+function buildCell(index, existingResult) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+
+  const resultLayer = document.createElement('div');
+  resultLayer.className = 'cell-result';
+  cell.appendChild(resultLayer);
+
+  function paintResult(tier) {
+    resultLayer.classList.toggle('win', tier.payout > 0);
+    resultLayer.innerHTML = tier.payout > 0
+      ? `<span>${tier.name}</span><span class="amount">+${tier.payout}</span>`
+      : `<span>${tier.name}</span>`;
+  }
+
+  if (existingResult) {
+    paintResult(existingResult);
+    revealedResults[index] = existingResult;
+    return cell;
+  }
+
+  // Foil canvas sits on top until scratched away.
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 96;
+  cell.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  const foilGradient = ctx.createLinearGradient(0, 0, 96, 96);
+  foilGradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--foil-a'));
+  foilGradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--foil-b'));
+  ctx.fillStyle = foilGradient;
+  ctx.fillRect(0, 0, 96, 96);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('SCRATCH', 48, 52);
+
+  let revealedAlready = false;
+  let scratching = false;
+
+  function erase(x, y) {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function scratchedFraction() {
+    const data = ctx.getImageData(0, 0, 96, 96).data;
+    let cleared = 0;
+    for (let i = 3; i < data.length; i += 4 * 8) { // sample every 8th pixel for speed
+      if (data[i] === 0) cleared++;
+    }
+    return cleared / (data.length / (4 * 8));
+  }
+
+  async function triggerReveal() {
+    if (revealedAlready) return;
+    revealedAlready = true;
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cellIndex: index })
+      });
+      if (!res.ok) throw new Error('reveal failed');
+      const data = await res.json();
+      canvas.remove();
+      paintResult(data.tier);
+      revealedResults[index] = data.tier;
+      updateTotal();
+    } catch (e) {
+      revealedAlready = false;
+      showError('Lost connection while revealing \u2014 try scratching again.');
+    }
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: (clientX - rect.left) * (96 / rect.width), y: (clientY - rect.top) * (96 / rect.height) };
+  }
+
+  function onMove(e) {
+    if (!scratching || revealedAlready) return;
+    e.preventDefault();
+    const { x, y } = pointerPos(e);
+    erase(x, y);
+    if (scratchedFraction() > 0.55) {
+      scratching = false;
+      triggerReveal();
+    }
+  }
+
+  canvas.addEventListener('pointerdown', (e) => { scratching = true; onMove(e); });
+  canvas.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', () => { scratching = false; });
+
+  return cell;
+}
+
+async function loadSession() {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}`);
+    if (!res.ok) {
+      showError('This scratch card link is invalid or has expired. Ask your host for a new one.');
+      return;
+    }
+    const data = await res.json();
+    document.getElementById('presetName').textContent = data.presetName;
+    document.getElementById('priceLine').textContent = `Card price: ${data.cardPrice}`;
+
+    gridEl.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      gridEl.appendChild(buildCell(i, data.revealedResults[i]));
+    }
+    updateTotal();
+  } catch (e) {
+    showError('Could not reach the scratch card server.');
+  }
+}
+
+loadSession();
+</script>
+</body>
+</html>
