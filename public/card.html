@@ -151,7 +151,7 @@
 <body>
 
   <div class="eyebrow">Scratch Card</div>
-  <h1 id="presetName">Loading\u2026</h1>
+  <h1 id="presetName">Loading…</h1>
   <div class="price" id="priceLine"></div>
 
   <div class="card-panel">
@@ -161,7 +161,7 @@
   <div class="status-row">
     <div class="hint" id="hintText">Scratch each panel with your mouse or finger.</div>
     <div class="total">Revealed so far:<strong id="totalAmount">0</strong></div>
-    <div class="done-banner" id="doneBanner">Card complete \u2014 show this screen to the host for payout.</div>
+    <div class="done-banner" id="doneBanner">Card complete — show this screen to the host for payout.</div>
   </div>
 
   <div class="error-banner" id="errorBanner"></div>
@@ -231,7 +231,7 @@ function buildCell(index, existingResult) {
   }
 
   // Draws a filled line of circles between two points so fast swipes
-  // don't leave gaps \u2014 without this, quick mouse movement only erases
+  // don't leave gaps — without this, quick mouse movement only erases
   // isolated dots instead of a continuous stroke.
   function eraseLine(x0, y0, x1, y1) {
     const dist = Math.hypot(x1 - x0, y1 - y0);
@@ -254,8 +254,10 @@ function buildCell(index, existingResult) {
   function redrawFoil() {
     ctx.globalCompositeOperation = 'source-over';
     const foilGradient = ctx.createLinearGradient(0, 0, 96, 96);
-    foilGradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--foil-a'));
-    foilGradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--foil-b'));
+    const foilA = getComputedStyle(document.documentElement).getPropertyValue('--foil-a').trim();
+    const foilB = getComputedStyle(document.documentElement).getPropertyValue('--foil-b').trim();
+    foilGradient.addColorStop(0, foilA);
+    foilGradient.addColorStop(1, foilB);
     ctx.fillStyle = foilGradient;
     ctx.fillRect(0, 0, 96, 96);
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
@@ -272,11 +274,11 @@ function buildCell(index, existingResult) {
 
     // Instantly clear the rest of the foil and show a "Revealing..."
     // state right away, so there's no dead air while we wait on the
-    // network \u2014 the scratch itself always feels instant even if the
+    // network — the scratch itself always feels instant even if the
     // server call takes a moment.
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillRect(0, 0, 96, 96);
-    resultLayer.innerHTML = '<span>Revealing\u2026</span>';
+    resultLayer.innerHTML = '<span>Revealing…</span>';
 
     try {
       const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
@@ -294,7 +296,7 @@ function buildCell(index, existingResult) {
       revealedAlready = false;
       redrawFoil();
       resultLayer.innerHTML = '';
-      showError('Lost connection while revealing \u2014 scratch this box again to retry.');
+      showError('Lost connection while revealing — scratch this box again to retry.');
     }
   }
 
