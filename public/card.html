@@ -130,6 +130,17 @@
     z-index: 10;
   }
 
+  .scratch-debug {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 9px;
+    color: rgba(255,255,255,0.55);
+    z-index: 20;
+    pointer-events: none;
+    font-family: monospace;
+  }
+
   .status-row {
     margin-top: 22px;
     display: flex;
@@ -204,6 +215,9 @@ const doneBanner = document.getElementById('doneBanner');
 const errorBanner = document.getElementById('errorBanner');
 const hintText = document.getElementById('hintText');
 
+// Set to false once you've confirmed reveals are firing reliably.
+const SHOW_SCRATCH_DEBUG = true;
+
 let revealedResults = new Array(9).fill(null);
 let runningTotal = 0;
 
@@ -249,14 +263,32 @@ function buildCell(index, existingResult) {
   cell.appendChild(canvas);
   const ctx = canvas.getContext('2d');
 
+  let debugLabel = null;
+  if (SHOW_SCRATCH_DEBUG) {
+    debugLabel = document.createElement('div');
+    debugLabel.className = 'scratch-debug';
+    debugLabel.textContent = '0%';
+    cell.appendChild(debugLabel);
+  }
+
   let revealedAlready = false;
   let scratching = false;
   let lastPos = null;
 
+  // Bigger brush = fewer strokes needed to clear a meaningful fraction
+  // of a 96x96 box. 18px radius was too small for how people actually
+  // scratch; 26px covers a real swipe in one or two passes.
+  const BRUSH_RADIUS = 26;
+
+  // Lowered from 0.3. The sampling in scratchedFraction() is sparse
+  // (1 in every 8 pixels), so 30% coverage there means clearing a genuinely
+  // large chunk of the box — more than a natural scratch gesture produces.
+  const REVEAL_THRESHOLD = 0.15;
+
   function erase(x, y) {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.arc(x, y, BRUSH_RADIUS, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -296,36 +328,37 @@ function buildCell(index, existingResult) {
   redrawFoil();
 
   async function triggerReveal() {
-  if (revealedAlready) return;
-  revealedAlready = true;
+    if (revealedAlready) return;
+    revealedAlready = true;
 
-  resultLayer.innerHTML = '<span>Revealing…</span>';
+    resultLayer.innerHTML = '<span>Revealing…</span>';
 
-  try {
-    const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cellIndex: index })
-    });
-    if (!res.ok) throw new Error('reveal failed');
-    const data = await res.json();
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cellIndex: index })
+      });
+      if (!res.ok) throw new Error('reveal failed: ' + res.status);
+      const data = await res.json();
 
-    if (!data.tier || typeof data.tier.payout !== 'number' || typeof data.tier.name !== 'string') {
-      throw new Error('malformed reveal response: ' + JSON.stringify(data));
+      if (!data.tier || typeof data.tier.payout !== 'number' || typeof data.tier.name !== 'string') {
+        throw new Error('malformed reveal response: ' + JSON.stringify(data));
+      }
+
+      paintResult(data.tier);          // render first
+      revealedResults[index] = data.tier;
+      updateTotal();
+      canvas.remove();                 // only remove once render succeeded
+      if (debugLabel) debugLabel.remove();
+    } catch (e) {
+      console.error('[scratch] reveal failed:', e);
+      revealedAlready = false;
+      resultLayer.innerHTML = '';
+      redrawFoil();                    // canvas is still attached, so this actually works now
+      showError('Lost connection while revealing — scratch this box again to retry.');
     }
-
-    paintResult(data.tier);          // render first
-    revealedResults[index] = data.tier;
-    updateTotal();
-    canvas.remove();                 // only remove once render succeeded
-  } catch (e) {
-    console.error(e);
-    revealedAlready = false;
-    resultLayer.innerHTML = '';
-    redrawFoil();                    // canvas is still attached, so this actually works now
-    showError('Lost connection while revealing — scratch this box again to retry.');
   }
-}
 
   function pointerPos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -344,24 +377,29 @@ function buildCell(index, existingResult) {
       erase(x, y);
     }
     lastPos = { x, y };
-    if (scratchedFraction() > 0.3) {
+
+    const frac = scratchedFraction();
+    if (debugLabel) debugLabel.textContent = Math.round(frac * 100) + '%';
+
+    if (frac > REVEAL_THRESHOLD) {
       scratching = false;
       triggerReveal();
     }
   }
 
- canvas.addEventListener('pointerdown', (e) => {
-  scratching = true;
-  lastPos = null;
-  canvas.setPointerCapture(e.pointerId);
-  onMove(e);
-});
-canvas.addEventListener('pointermove', onMove);
-canvas.addEventListener('pointerup', (e) => {
-  scratching = false;
-  lastPos = null;
-  canvas.releasePointerCapture(e.pointerId);
-});
+  canvas.addEventListener('pointerdown', (e) => {
+    scratching = true;
+    lastPos = null;
+    canvas.setPointerCapture(e.pointerId);
+    onMove(e);
+  });
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', (e) => {
+    scratching = false;
+    lastPos = null;
+    canvas.releasePointerCapture(e.pointerId);
+  });
+
   return cell;
 }
 
