@@ -41,7 +41,7 @@
   }
 
   .logo-header img {
-    max-width: 140px;
+    max-width: 120px;
     height: auto;
     filter: drop-shadow(0 0 20px rgba(255, 20, 147, 0.4));
   }
@@ -94,12 +94,8 @@
     touch-action: none;
     border: 1px solid var(--accent-blue);
     box-shadow: inset 0 0 15px rgba(0, 191, 255, 0.1);
-  }
-
-  .cell canvas {
-    position: absolute;
-    inset: 0;
-    cursor: crosshair;
+    width: 96px;
+    height: 96px;
   }
 
   .cell-result {
@@ -114,6 +110,7 @@
     text-align: center;
     padding: 4px;
     background: var(--lose);
+    z-index: 1;
   }
 
   .cell-result.win {
@@ -124,6 +121,13 @@
   .cell-result .amount {
     font-size: 16px;
     margin-top: 2px;
+  }
+
+  .cell canvas {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+    z-index: 10;
   }
 
   .status-row {
@@ -173,35 +177,7 @@
 <body>
 
   <div class="logo-header">
-    <svg width="120" height="120" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <!-- Outer circle -->
-      <defs>
-        <linearGradient id="outerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#00bfff;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#7d5cff;stop-opacity:1" />
-        </linearGradient>
-        <linearGradient id="heartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#ff1493;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#c71585;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <circle cx="100" cy="100" r="95" fill="none" stroke="url(#outerGrad)" stroke-width="12" opacity="0.8"/>
-      <circle cx="100" cy="100" r="88" fill="#0a0e27" opacity="0.9"/>
-      
-      <!-- Heart with gradient -->
-      <path d="M100,140 Q70,110 70,85 Q70,65 85,65 Q100,65 100,75 Q100,65 115,65 Q130,65 130,85 Q130,110 100,140 Z" fill="url(#heartGrad)" opacity="0.9"/>
-      
-      <!-- Heartbeat line -->
-      <line x1="40" y1="100" x2="70" y2="100" stroke="#ff1493" stroke-width="2" opacity="0.6"/>
-      <polyline points="70,100 80,90 90,110 100,100 110,80 120,120" stroke="#ff1493" stroke-width="2" fill="none" opacity="0.8"/>
-      <line x1="120" y1="100" x2="160" y2="100" stroke="#ff1493" stroke-width="2" opacity="0.6"/>
-      
-      <!-- Small hearts -->
-      <text x="50" y="60" font-size="12" fill="#ff1493" opacity="0.6">♥</text>
-      <text x="150" y="60" font-size="12" fill="#ff1493" opacity="0.6">♥</text>
-      <text x="50" y="150" font-size="12" fill="#ff1493" opacity="0.6">♥</text>
-      <text x="150" y="150" font-size="12" fill="#ff1493" opacity="0.6">♥</text>
-    </svg>
+    <img src="/logo.png" alt="Club Pulse">
   </div>
 
   <div class="eyebrow">Club Pulse</div>
@@ -284,9 +260,6 @@ function buildCell(index, existingResult) {
     ctx.fill();
   }
 
-  // Draws a filled line of circles between two points so fast swipes
-  // don't leave gaps — without this, quick mouse movement only erases
-  // isolated dots instead of a continuous stroke.
   function eraseLine(x0, y0, x1, y1) {
     const dist = Math.hypot(x1 - x0, y1 - y0);
     const steps = Math.max(1, Math.ceil(dist / 6));
@@ -299,7 +272,7 @@ function buildCell(index, existingResult) {
   function scratchedFraction() {
     const data = ctx.getImageData(0, 0, 96, 96).data;
     let cleared = 0;
-    for (let i = 3; i < data.length; i += 4 * 8) { // sample every 8th pixel for speed
+    for (let i = 3; i < data.length; i += 4 * 8) {
       if (data[i] === 0) cleared++;
     }
     return cleared / (data.length / (4 * 8));
@@ -326,10 +299,6 @@ function buildCell(index, existingResult) {
     if (revealedAlready) return;
     revealedAlready = true;
 
-    // Instantly clear the rest of the foil and show a "Revealing..."
-    // state right away, so there's no dead air while we wait on the
-    // network — the scratch itself always feels instant even if the
-    // server call takes a moment.
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillRect(0, 0, 96, 96);
     resultLayer.innerHTML = '<span>Revealing…</span>';
