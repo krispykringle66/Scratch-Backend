@@ -219,24 +219,27 @@ function buildCell(index, existingResult) {
   cell.appendChild(canvas);
   const ctx = canvas.getContext('2d');
 
-  const foilGradient = ctx.createLinearGradient(0, 0, 96, 96);
-  foilGradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--foil-a'));
-  foilGradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--foil-b'));
-  ctx.fillStyle = foilGradient;
-  ctx.fillRect(0, 0, 96, 96);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = '11px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('SCRATCH', 48, 52);
-
   let revealedAlready = false;
   let scratching = false;
+  let lastPos = null;
 
   function erase(x, y) {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    ctx.arc(x, y, 18, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Draws a filled line of circles between two points so fast swipes
+  // don't leave gaps \u2014 without this, quick mouse movement only erases
+  // isolated dots instead of a continuous stroke.
+  function eraseLine(x0, y0, x1, y1) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / 6));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      erase(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
   }
 
   function scratchedFraction() {
@@ -248,9 +251,33 @@ function buildCell(index, existingResult) {
     return cleared / (data.length / (4 * 8));
   }
 
+  function redrawFoil() {
+    ctx.globalCompositeOperation = 'source-over';
+    const foilGradient = ctx.createLinearGradient(0, 0, 96, 96);
+    foilGradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--foil-a'));
+    foilGradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--foil-b'));
+    ctx.fillStyle = foilGradient;
+    ctx.fillRect(0, 0, 96, 96);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SCRATCH', 48, 52);
+  }
+
+  redrawFoil();
+
   async function triggerReveal() {
     if (revealedAlready) return;
     revealedAlready = true;
+
+    // Instantly clear the rest of the foil and show a "Revealing..."
+    // state right away, so there's no dead air while we wait on the
+    // network \u2014 the scratch itself always feels instant even if the
+    // server call takes a moment.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(0, 0, 96, 96);
+    resultLayer.innerHTML = '<span>Revealing\u2026</span>';
+
     try {
       const res = await fetch(`/api/sessions/${sessionId}/reveal`, {
         method: 'POST',
@@ -265,7 +292,9 @@ function buildCell(index, existingResult) {
       updateTotal();
     } catch (e) {
       revealedAlready = false;
-      showError('Lost connection while revealing \u2014 try scratching again.');
+      redrawFoil();
+      resultLayer.innerHTML = '';
+      showError('Lost connection while revealing \u2014 scratch this box again to retry.');
     }
   }
 
@@ -280,16 +309,21 @@ function buildCell(index, existingResult) {
     if (!scratching || revealedAlready) return;
     e.preventDefault();
     const { x, y } = pointerPos(e);
-    erase(x, y);
-    if (scratchedFraction() > 0.55) {
+    if (lastPos) {
+      eraseLine(lastPos.x, lastPos.y, x, y);
+    } else {
+      erase(x, y);
+    }
+    lastPos = { x, y };
+    if (scratchedFraction() > 0.3) {
       scratching = false;
       triggerReveal();
     }
   }
 
-  canvas.addEventListener('pointerdown', (e) => { scratching = true; onMove(e); });
+  canvas.addEventListener('pointerdown', (e) => { scratching = true; lastPos = null; onMove(e); });
   canvas.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', () => { scratching = false; });
+  window.addEventListener('pointerup', () => { scratching = false; lastPos = null; });
 
   return cell;
 }
